@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Digital Twin — Astronaut Health Monitor</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+  :root {
+    --bg:#060b14; --bg2:#0c1422; --bg3:#111d2e;
+    --border:rgba(56,165,255,0.12); --border2:rgba(56,165,255,0.25);
+    --text:#e8f4ff; --text2:#7aa8cc; --text3:#3d6480;
+    --accent:#38a5ff; --accent2:#00e5c0;
+    --ok:#00e5a0; --warn:#f5a623; --danger:#ff4d6d;
+    --mono:'Space Mono',monospace; --sans:'DM Sans',sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14px;}
+  .shell{display:grid;grid-template-rows:60px 1fr;height:100vh;}
+  .topbar{display:flex;align-items:center;gap:16px;padding:0 24px;border-bottom:0.5px solid var(--border);background:var(--bg2);}
+  .topbar-logo{font-family:var(--mono);font-size:13px;color:var(--accent);letter-spacing:0.08em;}
+  .topbar-sep{width:0.5px;height:20px;background:var(--border2);}
+  .topbar-info{font-size:12px;color:var(--text2);font-family:var(--mono);}
+  .live-dot{width:8px;height:8px;border-radius:50%;background:var(--ok);animation:pulse 1.4s infinite;margin-left:auto;}
+  .live-label{font-size:11px;color:var(--ok);font-family:var(--mono);}
+  @keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:0.5;transform:scale(0.85)}}
+  .main{display:grid;grid-template-columns:260px 1fr 280px;overflow:hidden;}
+  .sidebar{border-right:0.5px solid var(--border);background:var(--bg2);display:flex;flex-direction:column;overflow-y:auto;}
+  .sidebar-section{padding:16px;border-bottom:0.5px solid var(--border);}
+  .sidebar-label{font-size:10px;letter-spacing:0.12em;color:var(--text3);font-family:var(--mono);margin-bottom:10px;text-transform:uppercase;}
+  .ast-card{display:flex;align-items:center;gap:10px;padding:10px;border-radius:8px;border:0.5px solid transparent;cursor:pointer;transition:all 0.15s;margin-bottom:6px;}
+  .ast-card:hover{background:var(--bg3);border-color:var(--border2);}
+  .ast-card.active{background:rgba(56,165,255,0.08);border-color:var(--accent);}
+  .ast-avatar{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:11px;font-weight:700;flex-shrink:0;}
+  .av-0{background:rgba(56,165,255,0.15);color:var(--accent);}
+  .av-1{background:rgba(0,229,192,0.15);color:var(--accent2);}
+  .av-2{background:rgba(245,166,35,0.15);color:var(--warn);}
+  .ast-name{font-size:13px;font-weight:500;color:var(--text);}
+  .ast-day{font-size:11px;color:var(--text2);font-family:var(--mono);}
+  .scenario-btn{width:100%;text-align:left;padding:8px 10px;border:0.5px solid transparent;border-radius:6px;background:transparent;color:var(--text2);font-family:var(--sans);font-size:12px;cursor:pointer;transition:all 0.15s;margin-bottom:4px;display:flex;align-items:center;gap:8px;}
+  .scenario-btn:hover{background:var(--bg3);color:var(--text);}
+  .scenario-btn.active{background:rgba(56,165,255,0.08);color:var(--accent);border-color:var(--accent);}
+  .scenario-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0;}
+  .refresh-btn{width:calc(100% - 32px);margin:12px 16px;padding:10px;background:var(--accent);color:#000;font-family:var(--mono);font-size:12px;font-weight:700;border:none;border-radius:8px;cursor:pointer;letter-spacing:0.05em;transition:opacity 0.15s;}
+  .refresh-btn:hover{opacity:0.85;} .refresh-btn:disabled{opacity:0.4;cursor:not-allowed;}
+  .panel{padding:20px;overflow-y:auto;display:flex;flex-direction:column;gap:16px;}
+  .astronaut-header{display:flex;align-items:center;gap:14px;padding:14px 18px;background:var(--bg2);border-radius:10px;border:0.5px solid var(--border);}
+  .ah-avatar{width:48px;height:48px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:14px;font-weight:700;}
+  .ah-name{font-size:17px;font-weight:600;}
+  .ah-meta{font-size:12px;color:var(--text2);font-family:var(--mono);margin-top:2px;}
+  .status-badge{margin-left:auto;padding:5px 12px;border-radius:20px;font-size:11px;font-family:var(--mono);font-weight:700;letter-spacing:0.05em;}
+  .badge-ok{background:rgba(0,229,160,0.12);color:var(--ok);border:0.5px solid rgba(0,229,160,0.3);}
+  .badge-warn{background:rgba(245,166,35,0.12);color:var(--warn);border:0.5px solid rgba(245,166,35,0.3);}
+  .badge-danger{background:rgba(255,77,109,0.12);color:var(--danger);border:0.5px solid rgba(255,77,109,0.3);}
+  .vitals-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;}
+  .vital-card{background:var(--bg2);border-radius:10px;border:0.5px solid var(--border);padding:14px;transition:border-color 0.3s;}
+  .vital-card.alert-warn{border-color:rgba(245,166,35,0.5);}
+  .vital-card.alert-danger{border-color:rgba(255,77,109,0.6);}
+  .vital-label{font-size:10px;letter-spacing:0.1em;color:var(--text3);font-family:var(--mono);text-transform:uppercase;margin-bottom:6px;}
+  .vital-value{font-size:28px;font-family:var(--mono);font-weight:700;color:var(--text);line-height:1;}
+  .vital-unit{font-size:12px;color:var(--text2);margin-left:2px;}
+  .vital-status{font-size:11px;margin-top:5px;font-family:var(--mono);}
+  .vs-ok{color:var(--ok);} .vs-warn{color:var(--warn);} .vs-danger{color:var(--danger);}
+  .charts-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+  .chart-card{background:var(--bg2);border-radius:10px;border:0.5px solid var(--border);padding:14px;}
+  .chart-title{font-size:11px;color:var(--text2);font-family:var(--mono);margin-bottom:10px;letter-spacing:0.06em;text-transform:uppercase;}
+  .ai-sidebar{border-left:0.5px solid var(--border);background:var(--bg2);display:flex;flex-direction:column;overflow-y:auto;}
+  .ai-section{padding:16px;border-bottom:0.5px solid var(--border);}
+  .ai-label{font-size:10px;letter-spacing:0.12em;color:var(--text3);font-family:var(--mono);margin-bottom:12px;text-transform:uppercase;}
+  .score-wrap{display:flex;align-items:center;gap:14px;}
+  .score-ring-wrap{position:relative;width:80px;height:80px;flex-shrink:0;}
+  .score-ring-wrap svg{transform:rotate(-90deg);}
+  .score-num{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:20px;font-weight:700;font-family:var(--mono);}
+  .score-info-label{font-size:13px;font-weight:600;color:var(--text);}
+  .score-sub{font-size:11px;color:var(--text2);font-family:var(--mono);margin-top:3px;}
+  .class-bars{display:flex;flex-direction:column;gap:8px;}
+  .cbar-row{display:flex;align-items:center;gap:8px;}
+  .cbar-label{font-size:11px;font-family:var(--mono);color:var(--text2);width:60px;}
+  .cbar-track{flex:1;height:5px;background:var(--bg3);border-radius:3px;overflow:hidden;}
+  .cbar-fill{height:100%;border-radius:3px;transition:width 0.5s ease;}
+  .cbar-pct{font-size:11px;font-family:var(--mono);color:var(--text2);width:36px;text-align:right;}
+  .alerts-list{display:flex;flex-direction:column;gap:6px;}
+  .alert-item{display:flex;align-items:flex-start;gap:8px;padding:8px 10px;border-radius:7px;font-size:12px;line-height:1.4;}
+  .alert-ok{background:rgba(0,229,160,0.07);color:#7de8cc;border:0.5px solid rgba(0,229,160,0.2);}
+  .alert-warn{background:rgba(245,166,35,0.07);color:#f5c06e;border:0.5px solid rgba(245,166,35,0.2);}
+  .alert-danger{background:rgba(255,77,109,0.09);color:#ff8fa3;border:0.5px solid rgba(255,77,109,0.25);}
+  .alert-icon{font-size:13px;margin-top:1px;flex-shrink:0;}
+  .rec-list{display:flex;flex-direction:column;gap:6px;}
+  .rec-item{display:flex;gap:8px;font-size:12px;color:var(--text2);line-height:1.4;}
+  .rec-num{font-family:var(--mono);color:var(--accent);font-size:11px;flex-shrink:0;margin-top:1px;}
+  .pred-box{background:var(--bg3);border-radius:8px;border:0.5px solid var(--border);padding:12px;}
+  .pred-label{font-size:10px;color:var(--text3);font-family:var(--mono);margin-bottom:4px;text-transform:uppercase;letter-spacing:0.1em;}
+  .pred-val{font-size:13px;color:var(--text);font-weight:500;}
+  .loading-overlay{position:fixed;inset:0;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:999;transition:opacity 0.4s;}
+  .loading-overlay.hidden{opacity:0;pointer-events:none;}
+  .loading-spinner{width:40px;height:40px;border-radius:50%;border:2px solid var(--border2);border-top-color:var(--accent);animation:spin 0.9s linear infinite;margin-bottom:16px;}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .loading-text{font-family:var(--mono);font-size:12px;color:var(--text2);}
+  @media(max-width:1100px){.main{grid-template-columns:220px 1fr}.ai-sidebar{display:none}}
+  @media(max-width:700px){.main{grid-template-columns:1fr}.sidebar{display:none}.vitals-grid{grid-template-columns:1fr 1fr}.charts-row{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="loading-overlay" id="loader">
+  <div class="loading-spinner"></div>
+  <div class="loading-text">INITIALIZING DIGITAL TWIN...</div>
+</div>
+<div class="shell">
+  <div class="topbar">
+    <div class="topbar-logo">DIGITAL TWIN // ISS HEALTH MONITOR</div>
+    <div class="topbar-sep"></div>
+    <div class="topbar-info" id="topMission">MISSION DAY —</div>
+    <div class="topbar-sep"></div>
+    <div class="topbar-info">AI: ISO-FOREST + RF-CLASSIFIER</div>
+    <div class="live-dot"></div>
+    <div class="live-label">LIVE</div>
+  </div>
+  <div class="main">
+    <div class="sidebar">
+      <div class="sidebar-section">
+        <div class="sidebar-label">Crew Members</div>
+        <div id="crewList"></div>
+      </div>
+      <div class="sidebar-section">
+        <div class="sidebar-label">Mission Scenario</div>
+        <div id="scenarioList"></div>
+      </div>
+      <button class="refresh-btn" id="refreshBtn" onclick="fetchVitals()">⟳ SIMULATE READING</button>
+      <div class="sidebar-section">
+        <div class="sidebar-label">Model Info</div>
+        <div style="font-size:11px;color:var(--text2);font-family:var(--mono);line-height:1.7;">
+          <div>Anomaly: Isolation Forest</div>
+          <div>Class: Random Forest</div>
+          <div>Training: 3,000 samples</div>
+          <div>Features: 6 vitals</div>
+          <div>Classes: Stable / Monitor / Critical</div>
+        </div>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="astronaut-header">
+        <div class="ah-avatar av-0" id="ahAvatar">CP</div>
+        <div>
+          <div class="ah-name" id="ahName">Cmdr. Patel</div>
+          <div class="ah-meta" id="ahMeta">AGE 42 · MISSION DAY 47 · SCENARIO: NORMAL REST</div>
+        </div>
+        <div class="status-badge badge-ok" id="statusBadge">STABLE</div>
+      </div>
+      <div class="vitals-grid">
+        <div class="vital-card" id="vc-hr"><div class="vital-label">Heart Rate</div><div><span class="vital-value" id="v-hr">—</span><span class="vital-unit">bpm</span></div><div class="vital-status vs-ok" id="t-hr">—</div></div>
+        <div class="vital-card" id="vc-spo2"><div class="vital-label">SpO₂</div><div><span class="vital-value" id="v-spo2">—</span><span class="vital-unit">%</span></div><div class="vital-status vs-ok" id="t-spo2">—</div></div>
+        <div class="vital-card" id="vc-bp"><div class="vital-label">Systolic BP</div><div><span class="vital-value" id="v-bp">—</span><span class="vital-unit">mmHg</span></div><div class="vital-status vs-ok" id="t-bp">—</div></div>
+        <div class="vital-card" id="vc-temp"><div class="vital-label">Core Temp</div><div><span class="vital-value" id="v-temp">—</span><span class="vital-unit">°C</span></div><div class="vital-status vs-ok" id="t-temp">—</div></div>
+        <div class="vital-card" id="vc-rr"><div class="vital-label">Resp. Rate</div><div><span class="vital-value" id="v-rr">—</span><span class="vital-unit">/min</span></div><div class="vital-status vs-ok" id="t-rr">—</div></div>
+        <div class="vital-card" id="vc-stress"><div class="vital-label">Cortisol Index</div><div><span class="vital-value" id="v-stress">—</span><span class="vital-unit">idx</span></div><div class="vital-status vs-ok" id="t-stress">—</div></div>
+      </div>
+      <div class="charts-row">
+        <div class="chart-card">
+          <div class="chart-title">Heart Rate — trend (last 20)</div>
+          <div style="position:relative;height:140px;"><canvas id="hrChart" role="img" aria-label="Heart rate trend">HR trend</canvas></div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-title">SpO₂ — trend (last 20)</div>
+          <div style="position:relative;height:140px;"><canvas id="spo2Chart" role="img" aria-label="SpO2 trend">SpO2 trend</canvas></div>
+        </div>
+      </div>
+    </div>
+    <div class="ai-sidebar">
+      <div class="ai-section">
+        <div class="ai-label">Health Score</div>
+        <div class="score-wrap">
+          <div class="score-ring-wrap">
+            <svg width="80" height="80" viewBox="0 0 80 80">
+              <circle cx="40" cy="40" r="32" fill="none" stroke="rgba(56,165,255,0.1)" stroke-width="7"/>
+              <circle id="scoreArc" cx="40" cy="40" r="32" fill="none" stroke="#00e5a0" stroke-width="7" stroke-dasharray="201" stroke-dashoffset="20" stroke-linecap="round"/>
+            </svg>
+            <div class="score-num" id="scoreNum" style="color:var(--ok);">—</div>
+          </div>
+          <div>
+            <div class="score-info-label" id="scoreLabel">—</div>
+            <div class="score-sub" id="anomalyPct">Anomaly: —%</div>
+          </div>
+        </div>
+      </div>
+      <div class="ai-section">
+        <div class="ai-label">Classification Confidence</div>
+        <div class="class-bars">
+          <div class="cbar-row"><div class="cbar-label">Stable</div><div class="cbar-track"><div class="cbar-fill" id="bar-stable" style="background:var(--ok);width:0%"></div></div><div class="cbar-pct" id="pct-stable">0%</div></div>
+          <div class="cbar-row"><div class="cbar-label">Monitor</div><div class="cbar-track"><div class="cbar-fill" id="bar-monitor" style="background:var(--warn);width:0%"></div></div><div class="cbar-pct" id="pct-monitor">0%</div></div>
+          <div class="cbar-row"><div class="cbar-label">Critical</div><div class="cbar-track"><div class="cbar-fill" id="bar-critical" style="background:var(--danger);width:0%"></div></div><div class="cbar-pct" id="pct-critical">0%</div></div>
+        </div>
+      </div>
+      <div class="ai-section">
+        <div class="ai-label">2-Hour Prediction</div>
+        <div class="pred-box"><div class="pred-label">Predicted Status</div><div class="pred-val" id="predVal">—</div></div>
+      </div>
+      <div class="ai-section">
+        <div class="ai-label">AI Alerts</div>
+        <div class="alerts-list" id="alertsList"><div class="alert-item alert-ok"><span class="alert-icon">·</span>Loading...</div></div>
+      </div>
+      <div class="ai-section">
+        <div class="ai-label">Recommendations</div>
+        <div class="rec-list" id="recList"></div>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+const API='http://localhost:5000/api';
+let currentAstronaut='patel',currentScenario='normal';
+let hrHistory=[],spo2History=[],hrChart,spo2Chart;
+const ASTRONAUTS=[{id:'patel',name:'Cmdr. Patel',initials:'CP',day:47,cls:'av-0'},{id:'okafor',name:'Dr. Okafor',initials:'DO',day:39,cls:'av-1'},{id:'reyes',name:'Lt. Reyes',initials:'LR',day:52,cls:'av-2'}];
+const SCENARIOS=[{id:'normal',label:'Normal Rest',dot:'#00e5a0'},{id:'eva',label:'EVA (Spacewalk)',dot:'#38a5ff'},{id:'stress',label:'Cognitive Stress',dot:'#f5a623'},{id:'hypoxia',label:'Mild Hypoxia',dot:'#c084fc'},{id:'anomaly',label:'Cardiac Anomaly',dot:'#ff4d6d'}];
+function buildSidebar(){
+  document.getElementById('crewList').innerHTML=ASTRONAUTS.map(a=>`<div class="ast-card ${a.id===currentAstronaut?'active':''}" onclick="selectAstronaut('${a.id}',this)"><div class="ast-avatar ${a.cls}">${a.initials}</div><div><div class="ast-name">${a.name}</div><div class="ast-day">Day ${a.day}</div></div></div>`).join('');
+  document.getElementById('scenarioList').innerHTML=SCENARIOS.map(s=>`<button class="scenario-btn ${s.id===currentScenario?'active':''}" onclick="selectScenario('${s.id}',this)"><span class="scenario-dot" style="background:${s.dot}"></span>${s.label}</button>`).join('');
+}
+function selectAstronaut(id,el){currentAstronaut=id;document.querySelectorAll('.ast-card').forEach(e=>e.classList.remove('active'));el.classList.add('active');hrHistory=[];spo2History=[];fetchVitals();}
+function selectScenario(id,el){currentScenario=id;document.querySelectorAll('.scenario-btn').forEach(e=>e.classList.remove('active'));el.classList.add('active');hrHistory=[];spo2History=[];fetchVitals();}
+function initCharts(){
+  const opts=(label,color,minY,maxY)=>({type:'line',data:{labels:Array(20).fill(''),datasets:[{label,data:Array(20).fill(null),borderColor:color,borderWidth:1.5,pointRadius:3,pointBackgroundColor:color,fill:true,backgroundColor:color+'18',tension:0.4}]},options:{responsive:true,maintainAspectRatio:false,animation:{duration:250},plugins:{legend:{display:false}},scales:{x:{display:false},y:{min:minY,max:maxY,ticks:{font:{size:10},color:'#3d6480',maxTicksLimit:4},grid:{color:'rgba(56,165,255,0.06)'}}}}});
+  hrChart=new Chart(document.getElementById('hrChart'),opts('HR','#38a5ff',40,160));
+  spo2Chart=new Chart(document.getElementById('spo2Chart'),opts('SpO2','#00e5c0',82,102));
+}
+function updateCharts(v){
+  hrHistory.push(v.hr);spo2History.push(v.spo2);
+  if(hrHistory.length>20){hrHistory.shift();spo2History.shift();}
+  hrChart.data.labels=hrHistory.map(()=>'');hrChart.data.datasets[0].data=[...hrHistory];hrChart.data.datasets[0].pointBackgroundColor=hrHistory.map(h=>h>110?'#ff4d6d':h>95?'#f5a623':'#38a5ff');hrChart.update('none');
+  spo2Chart.data.labels=spo2History.map(()=>'');spo2Chart.data.datasets[0].data=[...spo2History];spo2Chart.data.datasets[0].pointBackgroundColor=spo2History.map(s=>s<90?'#ff4d6d':s<94?'#f5a623':'#00e5c0');spo2Chart.update('none');
+}
+const VRULES={hr:{ok:[40,90],warn:[90,110]},spo2:{ok:[94,100],warn:[90,94]},bp:{ok:[70,128],warn:[128,140]},temp:{ok:[36,37.6],warn:[37.6,38]},rr:{ok:[8,20],warn:[20,24]},stress:{ok:[0,4],warn:[4,7]}};
+const VLABELS={hr:v=>v>110?'TACHYCARDIA':v>90?'ELEVATED':'NORMAL',spo2:v=>v<90?'CRITICAL':v<94?'LOW':'OPTIMAL',bp:v=>v>140?'HYPERTENSIVE':v>128?'ELEVATED':'NORMAL',temp:v=>v>38?'FEVER':v>37.6?'MILD FEVER':'NORMAL',rr:v=>v>24?'HIGH':v>20?'ELEVATED':'NORMAL',stress:v=>v>7?'CRITICAL':v>4?'ELEVATED':'LOW'};
+function vClass(k,val){const r=VRULES[k];if(r.ok[0]<=val&&val<=r.ok[1])return 'ok';if(r.warn[0]<=val&&val<=r.warn[1])return 'warn';return 'danger';}
+function updateVitals(v){['hr','spo2','bp','temp','rr','stress'].forEach(k=>{const cls=vClass(k,v[k]);document.getElementById('v-'+k).textContent=v[k];const t=document.getElementById('t-'+k);t.textContent=VLABELS[k](v[k]);t.className='vital-status vs-'+cls;document.getElementById('vc-'+k).className='vital-card'+(cls==='ok'?'':' alert-'+cls);});}
+function updateAI(ai,data){
+  const score=ai.health_score,circ=2*Math.PI*32,arc=document.getElementById('scoreArc');
+  arc.setAttribute('stroke-dasharray',circ.toFixed(1));arc.setAttribute('stroke-dashoffset',(circ*(1-score/100)).toFixed(1));
+  const sc=score>=80?'#00e5a0':score>=55?'#f5a623':'#ff4d6d';arc.setAttribute('stroke',sc);
+  document.getElementById('scoreNum').textContent=score;document.getElementById('scoreNum').style.color=sc;
+  document.getElementById('scoreLabel').textContent=score>=80?'EXCELLENT':score>=60?'FAIR':'CRITICAL';
+  document.getElementById('anomalyPct').textContent='Anomaly: '+ai.anomaly_prob+'%';
+  const cp=ai.class_probs||{stable:80,monitor:15,critical:5};
+  ['stable','monitor','critical'].forEach(k=>{const p=cp[k]||0;document.getElementById('bar-'+k).style.width=p+'%';document.getElementById('pct-'+k).textContent=parseFloat(p).toFixed(0)+'%';});
+  document.getElementById('predVal').textContent=ai.prediction_2h;
+  const badge=document.getElementById('statusBadge');badge.textContent=ai.status.toUpperCase();badge.className='status-badge badge-'+(ai.status==='Stable'?'ok':ai.status==='Monitor'?'warn':'danger');
+  document.getElementById('alertsList').innerHTML=ai.alerts.map(a=>`<div class="alert-item alert-${a.level==='warning'?'warn':a.level}"><span class="alert-icon">${a.level==='ok'?'✓':a.level==='warning'?'!':'✕'}</span>${a.message}</div>`).join('');
+  document.getElementById('recList').innerHTML=ai.recommendations.map((r,i)=>`<div class="rec-item"><span class="rec-num">${String(i+1).padStart(2,'0')}</span>${r}</div>`).join('');
+  document.getElementById('topMission').textContent='MISSION DAY '+data.mission_day;
+  const ast=ASTRONAUTS.find(a=>a.id===currentAstronaut);
+  document.getElementById('ahName').textContent=data.astronaut;
+  document.getElementById('ahMeta').textContent=`AGE ${data.age} · MISSION DAY ${data.mission_day} · SCENARIO: ${data.scenario.toUpperCase()}`;
+  if(ast){const av=document.getElementById('ahAvatar');av.textContent=ast.initials;av.className='ah-avatar '+ast.cls;}
+}
+async function fetchVitals(){
+  const btn=document.getElementById('refreshBtn');btn.disabled=true;btn.textContent='⟳ FETCHING...';
+  try{const res=await fetch(`${API}/vitals?astronaut=${currentAstronaut}&scenario=${currentScenario}`);if(!res.ok)throw new Error();const data=await res.json();updateVitals(data.vitals);updateAI(data.ai,data);updateCharts(data.vitals);}
+  catch{simulateLocally();}
+  finally{btn.disabled=false;btn.textContent='⟳ SIMULATE READING';}
+}
+const BL={patel:{hr:68,spo2:98,bp:115,temp:36.9,rr:14,stress:1.9,day:47,age:42,name:'Cmdr. Patel'},okafor:{hr:74,spo2:97,bp:122,temp:37.1,rr:16,stress:2.4,day:39,age:36,name:'Dr. Okafor'},reyes:{hr:70,spo2:98,bp:118,temp:37.0,rr:15,stress:2.0,day:52,age:29,name:'Lt. Reyes'}};
+const SD={normal:{hr:0,spo2:0,bp:0,temp:0,rr:0,stress:0},eva:{hr:30,spo2:-2,bp:20,temp:0.8,rr:8,stress:4},stress:{hr:18,spo2:0,bp:14,temp:0.3,rr:4,stress:5},hypoxia:{hr:12,spo2:-7,bp:8,temp:0,rr:6,stress:2},anomaly:{hr:38,spo2:-1,bp:28,temp:0.2,rr:5,stress:3}};
+function rnd(a,b){return Math.random()*(b-a)+a;}
+function simulateLocally(){
+  const b=BL[currentAstronaut],d=SD[currentScenario];
+  const v={hr:Math.round(Math.max(30,Math.min(200,b.hr+d.hr+rnd(-3,3)))),spo2:Math.round(Math.max(70,Math.min(100,b.spo2+d.spo2+rnd(-1,1)))),bp:Math.round(Math.max(70,Math.min(200,b.bp+d.bp+rnd(-4,4)))),temp:parseFloat((b.temp+d.temp+rnd(-0.1,0.1)).toFixed(1)),rr:Math.round(Math.max(8,Math.min(40,b.rr+d.rr+rnd(-1,1)))),stress:parseFloat((b.stress+d.stress+rnd(-0.2,0.2)).toFixed(1))};
+  let score=100,anomaly=5,si=0;const alerts=[],recs=[];
+  if(v.hr>110){alerts.push({level:'danger',message:'Heart rate critically high — tachycardia'});score-=25;anomaly+=35;si=2;recs.push('Immediate rest and cardiac monitoring');}
+  else if(v.hr>95){alerts.push({level:'warning',message:'Heart rate elevated'});score-=10;anomaly+=15;si=Math.max(si,1);recs.push('Reduce physical activity');}
+  if(v.spo2<90){alerts.push({level:'danger',message:'SpO₂ critically low — hypoxia risk'});score-=30;anomaly+=40;si=2;recs.push('Supplemental O₂ required');}
+  else if(v.spo2<94){alerts.push({level:'warning',message:'SpO₂ below optimal'});score-=15;anomaly+=20;si=Math.max(si,1);recs.push('Monitor O₂ and reduce exertion');}
+  if(v.bp>140){alerts.push({level:'danger',message:'Systolic BP dangerously high'});score-=20;anomaly+=25;si=2;recs.push('Anti-hypertensive protocol');}
+  else if(v.bp>128){alerts.push({level:'warning',message:'BP slightly elevated'});score-=8;anomaly+=12;si=Math.max(si,1);recs.push('Hydrate and rest');}
+  if(v.stress>7){alerts.push({level:'danger',message:'Cortisol index critical'});score-=18;anomaly+=20;si=2;recs.push('Mandatory rest and psych check-in');}
+  else if(v.stress>4){alerts.push({level:'warning',message:'Stress index elevated'});score-=8;anomaly+=10;si=Math.max(si,1);recs.push('20-min mindfulness session');}
+  if(!alerts.length){alerts.push({level:'ok',message:'All vitals within mission-safe parameters'});recs.push('Continue current mission activities');}
+  score=Math.max(0,Math.round(score));anomaly=Math.min(95,Math.round(anomaly+rnd(0,5)));
+  const cp=si===0?{stable:80+rnd(0,15),monitor:rnd(0,12),critical:rnd(0,5)}:si===1?{stable:rnd(10,30),monitor:50+rnd(0,20),critical:rnd(5,20)}:{stable:rnd(0,10),monitor:rnd(10,25),critical:55+rnd(0,30)};
+  const tot=cp.stable+cp.monitor+cp.critical;Object.keys(cp).forEach(k=>cp[k]=parseFloat((cp[k]/tot*100).toFixed(1)));
+  const data={astronaut:b.name,mission_day:b.day,age:b.age,scenario:currentScenario,vitals:v,ai:{health_score:score,anomaly_prob:anomaly,status:['Stable','Monitor','Critical'][si],class_probs:cp,prediction_2h:si===0?'Stable':si===1?'Close monitoring advised':'Intervention likely needed',alerts,recommendations:recs}};
+  updateVitals(data.vitals);updateAI(data.ai,data);updateCharts(data.vitals);
+}
+window.addEventListener('DOMContentLoaded',()=>{buildSidebar();initCharts();for(let i=0;i<10;i++)simulateLocally();document.getElementById('loader').classList.add('hidden');});
+</script>
+</body>
+</html>
